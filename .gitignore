@@ -1,0 +1,18 @@
+data/bronze/*
+data/silver/*
+data/gold/*
+!data/bronze/.gitkeep
+!data/silver/.gitkeep
+!data/gold/.gitkeep
+
+# Ignora arquivos de dados pesados
+*.csv
+*.parquet
+*.xlsx
+*.zip
+*.7z
+
+# Outros arquivos do sistema e ambiente
+venv/
+__pycache__/
+.DS_Store
