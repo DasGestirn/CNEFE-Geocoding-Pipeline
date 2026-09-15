@@ -79,3 +79,42 @@ def processar_cnefe():
     df_cnefe.to_parquet("data/silver/cnefe.parquet", index=False)
     print(f"CNEFE salvo em {caminho_saida} com sucesso.")
 
+def processar_busca():
+
+  caminho_busca = "data/bronze/2026_teste_tecnico_relinke_cidacs(in).csv"
+  df_busca = pd.read_csv(caminho_busca, dtype=str)
+
+  df_busca["logradouro_limpo"] = df_busca["consulta_logradouro"].apply(
+      padronizar_texto
+  )
+  df_busca["bairro_limpo"] = df_busca["consulta_bairro"].apply(
+      padronizar_texto
+  )
+  df_busca["complemento_limpo"] = df_busca["consulta_complemento"].apply(
+      padronizar_texto
+  )
+
+  # Tratamento do campo número 
+  df_busca["numero"] = (
+      df_busca["consulta_numero"].fillna("SN").apply(padronizar_texto)
+  )
+  df_busca["numero"] = df_busca["numero"].replace(["", "NONE"], "SN")
+
+  df_busca["cep"] = (
+      df_busca["consulta_cep"]
+      .fillna("")
+      .str.replace(r"\D", "", regex=True)
+      .str.zfill(8)
+  )
+  df_busca["municipio"] = (
+      df_busca["consulta_municipio"].astype(str).str.strip().str[:6]
+  )
+
+  df_busca.to_parquet("data/silver/busca.parquet", index=False)
+  print("Base de busca salva em data/silver/busca.parquet com sucesso.")
+
+
+if __name__ == "__main__":
+  processar_cnefe()
+  processar_busca()
+
