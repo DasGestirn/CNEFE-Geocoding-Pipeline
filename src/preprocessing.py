@@ -54,6 +54,11 @@ def processar_cnefe():
             NULLIF(TRIM(NOM_TITULO_SEGLOGR), ''), 
             NULLIF(TRIM(NOM_SEGLOGR), '')
         ) AS logradouro,
+        CONCAT_WS(' ', 
+            NULLIF(TRIM(NOM_COMP_ELEM1), ''), NULLIF(TRIM(VAL_COMP_ELEM1), ''),
+            NULLIF(TRIM(NOM_COMP_ELEM2), ''), NULLIF(TRIM(VAL_COMP_ELEM2), ''),
+            NULLIF(TRIM(NOM_COMP_ELEM3), ''), NULLIF(TRIM(VAL_COMP_ELEM3), '')
+        ) AS complemento,
         CASE 
             WHEN DSC_MODIFICADOR = 'SN' THEN 'SN' 
             ELSE CAST(NUM_ENDERECO AS VARCHAR) 
@@ -71,6 +76,7 @@ def processar_cnefe():
     
     df_cnefe['logradouro_limpo'] = df_cnefe['logradouro'].apply(padronizar_texto)
     df_cnefe['bairro_limpo'] = df_cnefe['bairro'].apply(padronizar_texto)
+    df_cnefe["complemento_limpo"] = df_cnefe["complemento"].apply(padronizar_texto)
     
     # Limpa números com notação decimal desnecessárias
     df_cnefe['numero'] = df_cnefe['numero'].fillna('SN').astype(str).str.replace(r'\.0$', '', regex=True)
