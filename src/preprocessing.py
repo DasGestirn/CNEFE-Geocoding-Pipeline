@@ -1,3 +1,4 @@
+import gc
 import re
 import unicodedata
 from pathlib import Path
@@ -6,6 +7,23 @@ import duckdb
 import pandas as pd
 
 Path("data/silver").mkdir(parents=True, exist_ok=True)
+
+# Pré-compilação
+
+REGEX_NONE = re.compile(r"\bNONE\b")
+REGEX_PONTUACAO = re.compile(r'[^\w\s]')
+REGEX_ESPACOS = re.compile(r'\s+')
+
+SUBSTITUICOES = [
+    (re.compile(r"\bRUA\b"), "R"),
+    (re.compile(r"\bAVENIDA\b"), "AV"),
+    (re.compile(r"\bRODOVIA\b"), "ROD"),
+    (re.compile(r"\bTRAVESSA\b"), "TV"),
+    (re.compile(r"\bPRACA\b"), "PCA"),
+    (re.compile(r"\bSEM NUMERO\b"), "SN"),
+    (re.compile(r"\bS N\b"), "SN"),
+    (re.compile(r"\bS/N\b"), "SN"),
+]
 
 def padronizar_texto(texto):
 
@@ -17,32 +35,24 @@ def padronizar_texto(texto):
     texto = str(texto).upper().strip()
 
     # Remove o 'NONE' de dentro das células
-    texto = re.sub(r"\bNONE\b", "", texto)
+    texto = REGEX_NONE.sub("", texto)
     
     # Tirando todo os acentos das palavras ("NÃO" -> "NAO")
     texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     
     # Substituindo pontuações e caracteres especiais por espaço
-    texto = re.sub(r'[^\w\s]', ' ', texto)
+    texto = REGEX_PONTUACAO.sub(' ', texto)
     
-    substituicoes = {
-      r"\bRUA\b": "R",
-      r"\bAVENIDA\b": "AV",
-      r"\bRODOVIA\b": "ROD",
-      r"\bTRAVESSA\b": "TV",
-      r"\bPRACA\b": "PCA",
-      r"\bSEM NUMERO\b": "SN",
-      r"\bS N\b": "SN",
-      r"\bS/N\b": "SN",
-    }
-    for padrao, substituto in substituicoes.items():
+    for padrao, substituto in SUBSTITUICOES.items():
         texto = re.sub(padrao, substituto, texto)
         
     # Remoção de espaços duplos gerados pelas etapas anteriores
-    texto = re.sub(r'\s+', ' ', texto).strip()
+    texto = REGEX_ESPACOS.sub(' ', texto).strip()
     return texto
 
 def processar_cnefe():
+
+    # TODO: Tem que otimizar essa query de alguma forma. A pipeline está travando na etapa 1.
     
     query = """
     SELECT DISTINCT
@@ -75,8 +85,13 @@ def processar_cnefe():
     df_cnefe = duckdb.execute(query).df()
     
     df_cnefe['logradouro_limpo'] = df_cnefe['logradouro'].apply(padronizar_texto)
+    gc.collect()
+
     df_cnefe['bairro_limpo'] = df_cnefe['bairro'].apply(padronizar_texto)
+    gc.collect()
+
     df_cnefe["complemento_limpo"] = df_cnefe["complemento"].apply(padronizar_texto)
+    gc.collect()
     
     # Limpa números com notação decimal desnecessárias
     df_cnefe['numero'] = df_cnefe['numero'].fillna('SN').astype(str).str.replace(r'\.0$', '', regex=True)

@@ -17,14 +17,15 @@ def executar_matching():
     FROM read_parquet('data/silver/busca.parquet') b
     LEFT JOIN (
         SELECT 
-            municipio, logradouro_limpo, numero, 
+            municipio, logradouro_limpo, numero, complemento_limpo,
             MIN(setor_censitario) AS setor_censitario 
         FROM read_parquet('data/silver/cnefe.parquet')
-        GROUP BY municipio, logradouro_limpo, numero
+        GROUP BY municipio, logradouro_limpo, numero, complemento_limpo
     ) c
         ON b.municipio = c.municipio 
        AND b.logradouro_limpo = c.logradouro_limpo 
        AND b.numero = c.numero
+       AND b.complemento_limpo = c.complemento_limpo
     """
     
     df_resultado = duckdb.execute(query_exata).df()
