@@ -1,10 +1,9 @@
-import gc
 import re
 import unicodedata
 from pathlib import Path
 
 import duckdb
-import pandas as pd
+import polars as pl
 
 Path("data/silver").mkdir(parents=True, exist_ok=True)
 
@@ -28,7 +27,7 @@ SUBSTITUICOES = [
 def padronizar_texto(texto):
 
     # Troca espaço vazio por uma string vazia
-    if pd.isna(texto) or texto is None:
+    if texto is None:
         return ""
     
     # Deixando todo o texto em caixa alta e remove espaço em branco nas pontas
@@ -37,14 +36,14 @@ def padronizar_texto(texto):
     # Remove o 'NONE' de dentro das células
     texto = REGEX_NONE.sub("", texto)
     
-    # Tirando todo os acentos das palavras ("NÃO" -> "NAO")
+    # Tirando todo os acentos das palavras ("NÃO" -> "NAO", "PÓ" -> "PO")
     texto = ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
     
     # Substituindo pontuações e caracteres especiais por espaço
     texto = REGEX_PONTUACAO.sub(' ', texto)
     
-    for padrao, substituto in SUBSTITUICOES.items():
-        texto = re.sub(padrao, substituto, texto)
+    for padrao, substituto in SUBSTITUICOES:
+        texto = padrao.sub(substituto, texto)
         
     # Remoção de espaços duplos gerados pelas etapas anteriores
     texto = REGEX_ESPACOS.sub(' ', texto).strip()
@@ -82,56 +81,62 @@ def processar_cnefe():
     )
     """
     
-    df_cnefe = duckdb.execute(query).df()
-    
-    df_cnefe['logradouro_limpo'] = df_cnefe['logradouro'].apply(padronizar_texto)
-    gc.collect()
+    df_cnefe = duckdb.execute(query).pl()
 
-    df_cnefe['bairro_limpo'] = df_cnefe['bairro'].apply(padronizar_texto)
-    gc.collect()
-
-    df_cnefe["complemento_limpo"] = df_cnefe["complemento"].apply(padronizar_texto)
-    gc.collect()
+    df_cnefe = df_cnefe.with_columns(
+       pl.col("logradouro").map_elements(padronizar_texto, return_dtype=pl.String).alias("logradouro_limpo"),
+       pl.col("bairro").map_elements(padronizar_texto, return_dtype=pl.String).alias("bairro_limpo"),
+       pl.col("complemento").map_elements(padronizar_texto, return_dtype=pl.String).alias("complemento_limpo")
+    )
     
     # Limpa números com notação decimal desnecessárias
-    df_cnefe['numero'] = df_cnefe['numero'].fillna('SN').astype(str).str.replace(r'\.0$', '', regex=True)
-    
+
+    df_cnefe = df_cnefe.with_columns(pl.col("numero").fill_null("SN").str.replace(r"\.0$", ""))
+
     caminho_saida = 'data/silver/cnefe.parquet'
-    df_cnefe.to_parquet("data/silver/cnefe.parquet", index=False)
+    df_cnefe.write_parquet('data/silver/cnefe.parquet')
     print(f"CNEFE salvo em {caminho_saida} com sucesso.")
 
 def processar_busca():
 
   caminho_busca = "data/bronze/2026_teste_tecnico_relinke_cidacs(in).csv"
-  df_busca = pd.read_csv(caminho_busca, dtype=str)
+  df_busca = pl.read_csv(caminho_busca, infer_schema_length=0)
 
-  df_busca["logradouro_limpo"] = df_busca["consulta_logradouro"].apply(
-      padronizar_texto
-  )
-  df_busca["bairro_limpo"] = df_busca["consulta_bairro"].apply(
-      padronizar_texto
-  )
-  df_busca["complemento_limpo"] = df_busca["consulta_complemento"].apply(
-      padronizar_texto
-  )
+  df_busca = df_busca.with_columns(
+         pl.col("consulta_logradouro").map_elements(padronizar_texto, return_dtype=pl.String).alias("logradouro_limpo"),
+         pl.col("consulta_bairro").map_elements(padronizar_texto, return_dtype=pl.String).alias("bairro_limpo"),
+         pl.col("consulta_complemento").map_elements(padronizar_texto, return_dtype=pl.String).alias("complemento_limpo")
+      )
 
   # Tratamento do campo número 
-  df_busca["numero"] = (
-      df_busca["consulta_numero"].fillna("SN").apply(padronizar_texto)
-  )
-  df_busca["numero"] = df_busca["numero"].replace(["", "NONE"], "SN")
 
-  df_busca["cep"] = (
-      df_busca["consulta_cep"]
-      .fillna("")
-      .str.replace(r"\D", "", regex=True)
-      .str.zfill(8)
-  )
-  df_busca["municipio"] = (
-      df_busca["consulta_municipio"].astype(str).str.strip().str[:6]
-  )
+  df_busca = df_busca.with_columns(pl.col("consulta_numero")
+                                   .fill_null("SN")
+                                   .map_elements(padronizar_texto,return_dtype=pl.String)
+                                   .alias("numero")
+                                   )
 
-  df_busca.to_parquet("data/silver/busca.parquet", index=False)
+  df_busca = df_busca.with_columns(
+        pl.col("numero").replace({"": "SN", "NONE": "SN"})
+    )
+
+  # Padronizando o CEP: SUbstitui espaços vazios por "" e tira tudo que não é um número
+  # Exemplo: ("01310-100" -> "01310100")
+  df_busca = df_busca.with_columns(pl.col("consulta_cep")
+                                   .fill_null("")
+                                   .str.replace_all(r"\D", "")
+                                   .str.zfill(8)
+                                   .alias("cep")
+                                   )
+
+  df_busca = df_busca.with_columns(pl.col("consulta_municipio")
+                                   .cast(pl.String)
+                                   .str.strip_chars()
+                                   .str.slice(0, 6)
+                                   .alias("municipio")
+                                   )
+
+  df_busca.write_parquet("data/silver/busca.parquet")
   print("Base de busca salva em data/silver/busca.parquet com sucesso.")
 
 
