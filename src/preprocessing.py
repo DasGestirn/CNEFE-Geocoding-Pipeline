@@ -100,7 +100,7 @@ def processar_cnefe():
 def processar_busca():
 
   caminho_busca = "data/bronze/2026_teste_tecnico_relinke_cidacs(in).csv"
-  df_busca = pl.read_csv(caminho_busca, infer_schema_length=0)
+  df_busca = pl.read_csv(caminho_busca, separator=';', infer_schema_length=0)
 
   df_busca = df_busca.with_columns(
          pl.col("consulta_logradouro").map_elements(padronizar_texto, return_dtype=pl.String).alias("logradouro_limpo"),
