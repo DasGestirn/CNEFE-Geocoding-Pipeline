@@ -29,6 +29,11 @@ def executar_matching():
     """
     
     df_resultado = duckdb.execute(query_exata).pl()
+
+    df_resultado = df_resultado.with_columns([
+        pl.col("score_similaridade").cast(pl.Float64),
+        pl.col("setor_censitario_encontrado").cast(pl.String)
+    ])
     
     df_exatos = df_resultado.filter(pl.col("status_match") == "EXATO")
     df_pendentes = df_resultado.filter(pl.col("status_match") == "PENDENTE")
@@ -60,9 +65,12 @@ def executar_matching():
             opcoes = dict_candidatos.get(mun)
             
             if not opcoes:
-                return (None, 0.0, "NAO_ENCONTRADO_MUN")
+                return {
+                    "setor_censitario_encontrado_novo": None, 
+                    "score_similaridade_novo": 0.0, 
+                    "status_match_novo": "NAO_ENCONTRADO_MUN"
+                }
                 
-            # opcoes.keys() passa apenas os logradouros 
             match = process.extractOne(
                 str(logr_busca), 
                 opcoes.keys(), 
@@ -71,17 +79,33 @@ def executar_matching():
             
             if match:
                 logr_encontrado = match[0]
-                score = float(match[1])
+                score = round(float(match[1]),2)
                 
                 if score >= 85.0:
-                    setor = opcoes[logr_encontrado]
-                    return (setor, score, "ALTA_CONFIANCA")
+                    setor = str(opcoes[logr_encontrado]) 
+                    return {
+                        "setor_censitario_encontrado_novo": setor, 
+                        "score_similaridade_novo": score, 
+                        "status_match_novo": "ALTA_CONFIANCA"
+                    }
                 elif score >= 65.0:
-                    return (None, score, "AMBIGUO")
+                    return {
+                        "setor_censitario_encontrado_novo": None, 
+                        "score_similaridade_novo": score, 
+                        "status_match_novo": "AMBIGUO"
+                    }
                 else:
-                    return (None, score, "NAO_ENCONTRADO")
+                    return {
+                        "setor_censitario_encontrado_novo": None, 
+                        "score_similaridade_novo": score, 
+                        "status_match_novo": "NAO_ENCONTRADO"
+                    }
             
-            return (None, 0.0, "ERRO_FUZZY")
+            return {
+                "setor_censitario_encontrado_novo": None, 
+                "score_similaridade_novo": 0.0, 
+                "status_match_novo": "ERRO_FUZZY"
+            }
 
         df_pendentes = (
             df_pendentes.with_columns(
