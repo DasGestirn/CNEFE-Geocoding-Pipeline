@@ -58,6 +58,8 @@ def executar_matching():
                 dict_candidatos[mun] = {}
             dict_candidatos[mun][row["logradouro_limpo"]] = row["setor_censitario"]
 
+        registros_ambiguos = []
+
         def aplicar_fuzzy(row):
             mun = row["municipio"]
             logr_busca = row["logradouro_limpo"]
@@ -71,33 +73,47 @@ def executar_matching():
                     "status_match_novo": "NAO_ENCONTRADO_MUN"
                 }
                 
-            match = process.extractOne(
+            matches = process.extract(
                 str(logr_busca), 
-                opcoes.keys(), 
-                scorer=fuzz.token_sort_ratio
+                opcoes.keys(),
+                scorer=fuzz.WRatio,
+                limit = 3, 
             )
             
-            if match:
-                logr_encontrado = match[0]
-                score = round(float(match[1]),2)
+            if matches:
+                melhor_match = matches[0]
+                logr_top1, score_top1 = melhor_match[0], round(float(melhor_match[1]), 2)
                 
-                if score >= 85.0:
-                    setor = str(opcoes[logr_encontrado]) 
+                if score_top1 >= 85.0:
+                    setor = str(opcoes[logr_top1]) 
                     return {
                         "setor_censitario_encontrado_novo": setor, 
-                        "score_similaridade_novo": score, 
+                        "score_similaridade_novo": score_top1, 
                         "status_match_novo": "ALTA_CONFIANCA"
                     }
-                elif score >= 65.0:
-                    return {
-                        "setor_censitario_encontrado_novo": None, 
-                        "score_similaridade_novo": score, 
-                        "status_match_novo": "AMBIGUO"
+                elif score_top1 >= 65.0:
+                    # Criando csv com resultados ambíguos (65 <= score <= 84.9) para revisão manual
+                    sugestao = {
+                        "municipio": mun,
+                        "logradouro": logr_busca,
+                        "score_top1": score_top1,
+                        "candidato_1": logr_top1,
+                        "setor_1": opcoes[logr_top1]
                     }
+                    if (len(matches) > 1):
+                        sugestao["candidato_2"] = matches[1][0]
+                        sugestao["score_2"] = round(float(matches[1][1]), 2)
+                        sugestao["setor_2"] = opcoes[matches[1][0]]
+                    if (len(matches) > 2):
+                        sugestao["candidato_3"] = matches[2][0]
+                        sugestao["score_3"] = round(float(matches[2][1]), 2)
+                        sugestao["setor_3"] = opcoes[matches[2][0]]
+                    registros_ambiguos.append(sugestao)
+
                 else:
                     return {
                         "setor_censitario_encontrado_novo": None, 
-                        "score_similaridade_novo": score, 
+                        "score_similaridade_novo": score_top1, 
                         "status_match_novo": "NAO_ENCONTRADO"
                     }
             
@@ -138,6 +154,12 @@ def executar_matching():
     print("\n--- RESUMO DA EXECUÇÃO ---")
     print(df_resultado['status_match'].value_counts())
     print("--------------------------\n")
+
+    if registros_ambiguos:
+        df_revisao = pl.DataFrame(registros_ambiguos)
+        caminho_revisao = "data/gold/revisao_ambiguos.csv"
+        df_revisao.write_csv(caminho_revisao, separator=';')
+        print(f"[{df_revisao.height}] casos ambíguos salvos em: {caminho_revisao} para revisão manual.")
 
 if __name__ == "__main__":
     executar_matching()
