@@ -76,7 +76,7 @@ def executar_matching():
             matches = process.extract(
                 str(logr_busca), 
                 opcoes.keys(),
-                scorer=fuzz.WRatio,
+                scorer=fuzz.WRatio, # Algoritmo de comparação escolhido do RapidFuzz
                 limit = 3, 
             )
             
