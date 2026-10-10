@@ -14,11 +14,11 @@ REGEX_PONTUACAO = re.compile(r'[^\w\s]')
 REGEX_ESPACOS = re.compile(r'\s+')
 
 SUBSTITUICOES = [
-    (re.compile(r"\bRUA\b"), "R"),
-    (re.compile(r"\bAVENIDA\b"), "AV"),
-    (re.compile(r"\bRODOVIA\b"), "ROD"),
-    (re.compile(r"\bTRAVESSA\b"), "TV"),
-    (re.compile(r"\bPRACA\b"), "PCA"),
+    (re.compile(r"^RUA\b"), "R"),
+    (re.compile(r"^AVENIDA\b"), "AV"),
+    (re.compile(r"^RODOVIA\b"), "ROD"),
+    (re.compile(r"^TRAVESSA\b"), "TV"),
+    (re.compile(r"^PRACA\b"), "PCA"),
     (re.compile(r"\bSEM NUMERO\b"), "SN"),
     (re.compile(r"\bS N\b"), "SN"),
     (re.compile(r"\bS/N\b"), "SN"),
@@ -50,8 +50,6 @@ def padronizar_texto(texto):
     return texto
 
 def processar_cnefe():
-
-    # TODO: Tem que otimizar essa query de alguma forma. A pipeline está travando na etapa 1.
     
     query = """
     SELECT DISTINCT
